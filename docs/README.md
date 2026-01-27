@@ -1,4 +1,4 @@
-# LingBot documents
+# LingBotVLA documents
 
 ## Build the docs
 

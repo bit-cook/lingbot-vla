@@ -3,8 +3,8 @@
 <p align="center">
   <a href="assets/LingBot-VLA.pdf"><img src="https://img.shields.io/static/v1?label=Paper&message=PDF&color=red&logo=arxiv"></a>
   <a href="https://technology.robbyant.com/lingbot-vla"><img src="https://img.shields.io/badge/Project-Website-blue"></a>
-  <a href="https://huggingface.co/robbyant/lingbot-vla-4b"><img src="https://img.shields.io/static/v1?label=%F0%9F%A4%97%20Model&message=Base-Weights&color=orange"></a>
-  <a href="https://huggingface.co/robbyant/lingbot-vla-4b-depth"><img src="https://img.shields.io/static/v1?label=%F0%9F%A4%97%20Model&message=Depth-Weights&color=yellow"></a>
+  <a href="https://huggingface.co/collections/robbyant/lingbot-vla"><img src="https://img.shields.io/static/v1?label=%F0%9F%A4%97%20Model&message=HuggingFace&color=yellow"></a>
+  <a href="https://modelscope.cn/collections/Robbyant/LingBot-VLA"><img src="https://img.shields.io/static/v1?label=🤖 Model&message=ModelScope&color=purple"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-green"></a>
 </p>
 
@@ -17,6 +17,11 @@
 **LingBot-VLA** has focused on **Pragmatic**:
 - **Large-scale Pre-training Data**: 20,000 hours of real-world
 data from 9 popular dual-arm robot configurations.
+<p align="center">
+  <img src="assets/scale_sr.png" width="45%" style="margin: 0 10px;">
+  <img src="assets/scale_ps.png" width="45%" style="margin: 0 10px;">
+</p>
+
 - **Strong Performance**: Achieve clear superiority over competitors on simulation and real-world benchmarks.
 - **Training Efficiency**: Represent a 1.5 ∼ 2.8× (depending on the relied VLM base model) speedup over existing VLA-oriented codebases.
 
@@ -36,7 +41,8 @@ Requirements
 
 ```bash
 # Install Lerobot
-git clone https://github.com/huggingface/lerobot.git
+pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/huggingface/lerobot.git
 cd lerobot
 git checkout 0cf864870cf29f4738d3ade893e6fd13fbd7cdb5
 pip install -e .
@@ -46,11 +52,14 @@ pip install /path/to/flash_attn-2.8.3+cu12torch2.8cxx11abiTRUE-cp312-cp312-linux
 # Clone the repository
 git clone https://github.com/robbyant/lingbot-vla.git
 cd lingbot-vla/
+git submodule update --init --recursive
 pip install -e .
 pip install -r requirements.txt
 # Install LingBot-Depth dependency
-cd ./lingbot/models/vla/vision_models/morgbd_clean/
-bash init.bash
+cd ./lingbotvla/models/vla/vision_models/lingbot-depth/
+pip install -e . --no-deps
+cd ../MoGe
+pip install -e .
 ```
 
 ---
@@ -59,20 +68,27 @@ bash init.bash
 We release LingBot-VLA pre-trained weights in two configurations: depth-free version and a depth-distillated version.
 - **Pretrained Checkpoints for Post-Training with and without depth**
 
-| Model Name | Huggingface Repository | Description |
-| :--- | :---: | :---: |
-| LingBot-VLA-4B &nbsp; | [🤗 robbyant/lingbot-vla-4b &nbsp;](https://huggingface.co/robbyant/lingbot-vla-4b) | LingBot-VLA *w/o* Depth|
-| LingBot-VLA-4B-Depth | [🤗 robbyant/lingbot-vla-4b-depth &nbsp;](https://huggingface.co/robbyant/lingbot-vla-4b-depth) | LingBot-VLA *w/* Depth |
+| Model Name | Huggingface | ModelScope | Description |
+| :--- | :---: | :---: | :---: |
+| LingBot-VLA-4B &nbsp; | [🤗 lingbot-vla-4b](https://huggingface.co/robbyant/lingbot-vla-4b) | [🤖 lingbot-vla-4b](https://modelscope.cn/models/Robbyant/lingbot-vla-4b) | LingBot-VLA *w/o* Depth|
+| LingBot-VLA-4B-Depth | [🤗 lingbot-vla-4b-depth](https://huggingface.co/robbyant/lingbot-vla-4b-depth) | [🤖 lingbot-vla-4b-depth](https://modelscope.cn/models/Robbyant/lingbot-vla-4b-depth) | LingBot-VLA *w/* Depth |
+
 
 
 
 To train LingBot with our codebase, weights from [Qwen2.5-VL-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct), [MoGe-2-vitb-normal](https://huggingface.co/Ruicheng/moge-2-vitb-normal), and [LingBot-Depth](https://huggingface.co/robbyant/lingbot-depth-pretrain-vitl-14) also need to be prepared.
-
+- **Run Command**:
+```bash
+python3 scripts/download_hf_model.py --repo_id robbyant/lingbot-vla-4b --local_dir lingbot-vla-4b 
+```
 ---
 
-## 💻 Post-Training Demo
-- **Training Configuration**:
+## 💻 Post-Training Example
 
+- **Data Preparation**
+Please follow [Robotwin2.0 Preparation](experiment/robotwin/README.md)
+
+- **Training Configuration**:
 We provide the mixed post-training configuration in five Robotwin 2.0 tasks ("open_microwave" "click_bell" "stack_blocks_three" "place_shoe" "put_object_cabinet").
 <details>
 <summary><b>Click to expand full YAML configuration</b></summary>
@@ -157,16 +173,20 @@ train:
 - **Run Command**:
 ```bash
 # without detph
-bash train.sh tasks/vla/train_lingbotvla.py configs/vla/robotwin_load20000h.yaml
+bash train.sh tasks/vla/train_lingbotvla.py ./configs/vla/robotwin_load20000h.yaml  --model.model_path /path/to/LingBot-VLA --data.train_path path/to/mixed_robotwin_5tasks --train.output_dir /path/to/lingbot_robotwin5tasks/ --model.tokenizer_path /path/to/Qwen2.5-VL-3B-Instruct --train.micro_batch_size ${your_batch_size} --train.global_batch_size ${your_batch_size * your_gpu_num}
 
 # with depth
-bash train.sh tasks/vla/train_lingbotvla.py configs/vla/robotwin_load20000h_depth.yaml
+bash train.sh tasks/vla/train_lingbotvla.py ./configs/vla/robotwin_load20000h_depth.yaml  --model.model_path /path/to/LingBot-VLA-Depth  --data.train_path /path/to/mixed_robotwin_5tasks --train.output_dir /path/to/lingbot_depth_robotwin5tasks --model.tokenizer_path /path/to/Qwen2.5-VL-3B-Instruct --model.moge_path /path/to/moge2-vitb-normal.pt --model.morgbd_path /path/to/LingBot-Depth-Pretrained --train.micro_batch_size ${your_batch_size} --train.global_batch_size ${your_batch_size * your_gpu_num}
 ```
 
 - **Evaluation**  
 ```bash
 # robotwin2.0
- bash start_multi_eval.sh $POST_TRAINING_CKPT
+export QWEN25_PATH=path_to_Qwen2.5-VL-3B-Instruct
+python -m deploy.lingbot_robotwin_policy \
+ --model_path path_to_your_model \
+ --use_length 50 \
+ --port port
 ```
 
 ---
@@ -257,6 +277,11 @@ Our LingBot-VLA achieves state-of-the-art results on real-world and simulation b
   </tbody>
 </table>
 
+<p align="center">
+  <img src="assets/exp-gm-100.png" width="45%" style="margin: 0 10px;">
+  <img src="assets/exp-robotwin.png" width="45%" style="margin: 0 10px;">
+</p>
+
 ---
 
 ## 📝 Citation
@@ -267,7 +292,7 @@ If you find our work useful in your research,  feel free to give us a cite.
 @article{wu2026pragmatic,
   title={A Pragmatic VLA Foundation Model},
   author={Wei Wu and Fan Lu and Yunnan Wang and Shuai Yang and Shi Liu and Fangjing Wang and Shuailei Ma and He Sun and Yong Wang and Zhenqi Qiu and Houlong Xiong and Ziyu Wang and Shuai Zhou and Yiyu Ren and Kejia Zhang and Hui Yu and Jingmei Zhao and Qian Zhu and Ran Cheng and Yong-Lu Li and Yongtao Huang and Xing Zhu and Yujun Shen and Kecheng Zheng},
-  journal={arXiv preprint arXiv:2601.00000},
+  journal={arXiv preprint arXiv:2601.18692v1},
   year={2026}
 }
 ```

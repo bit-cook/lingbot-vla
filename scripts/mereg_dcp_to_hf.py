@@ -3,9 +3,9 @@ import os
 
 from transformers import AutoConfig, AutoProcessor
 
-from lingbot.checkpoint import bytecheckpoint_ckpt_to_state_dict
-from lingbot.models import save_model_weights
-from lingbot.utils import helper
+from lingbotvla.checkpoint import bytecheckpoint_ckpt_to_state_dict
+from lingbotvla.models import save_model_weights
+from lingbotvla.utils import helper
 
 
 logger = helper.create_logger(__name__)

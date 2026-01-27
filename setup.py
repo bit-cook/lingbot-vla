@@ -29,7 +29,7 @@ def _is_torch_cuda_available() -> bool:
 
 
 def get_version() -> str:
-    with open(os.path.join("lingbot", "__init__.py"), encoding="utf-8") as f:
+    with open(os.path.join("lingbotvla", "__init__.py"), encoding="utf-8") as f:
         file_content = f.read()
         pattern = r"{}\W*=\W*\"([^\"]+)\"".format("__version__")
         (version,) = re.findall(pattern, file_content)
@@ -52,7 +52,7 @@ def main():
     install_requires = BASE_REQUIRE
 
     setup(
-        name="lingbot",
+        name="lingbotvla",
         version=get_version(),
         python_requires=">=3.8.0",
         packages=find_packages(exclude=["scripts", "tasks", "tests"]),

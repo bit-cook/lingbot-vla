@@ -1,6 +1,6 @@
 model:
-  model_path: /robby/share/MM/LingBot_ckpt/lingbot_vla/checkpoints/global_step_200000/hf_ckpt/
-  tokenizer_path: '/robby/share/MM/checkpoints/huggingface/Qwen2.5-VL-3B-Instruct/'
+  model_path: /path/to/LingBot-VLA
+  tokenizer_path: /path/to/Qwen2.5-VL-3B-Instruct/
   post_training: true
   adanorm_time: true
   old_adanorm: true
@@ -8,13 +8,13 @@ model:
 data:
   datasets_type: vla
   data_name: robotwin_5_new
-  train_path: /robby/share/Robotics/yangshuai/cache/huggingface/lerobot_merged/set_2/
+  train_path: /path/to/mixed_robotwin_5tasks
   num_workers: 8
   norm_type: bounds_99_woclip
   norm_stats_file: assets/norm_stats/robotwin_50.json
 
 train:
-  output_dir: /robby/share/MM/robotwin_ckpt/lingbot_cotraining_abs/lingbot_robotwin5new/
+  output_dir: /path/to/lingbot_robotwin5tasks/
   loss_type: L1_fm
   data_parallel_mode: fsdp2
   enable_full_shard: false

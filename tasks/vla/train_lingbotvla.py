@@ -15,28 +15,28 @@ import wandb
 from PIL import Image
 from tqdm import trange
 from torch.utils.tensorboard import SummaryWriter
-from lingbot.checkpoint import build_checkpointer, ckpt_to_state_dict
-from lingbot.data import (
+from lingbotvla.checkpoint import build_checkpointer, ckpt_to_state_dict
+from lingbotvla.data import (
     VLADataCollatorWithPacking,
     build_dataloader,
 )
-from lingbot.data.vla_data import liberoDataset, RobotwinDataset
-from lingbot.distributed.offloading import build_activation_offloading_context
-from lingbot.distributed.parallel_state import get_parallel_state, init_parallel_state
-from lingbot.distributed.torch_parallelize import build_parallelize_model
-from lingbot.models import build_foundation_model, build_processor, save_model_assets, save_model_weights, build_tokenizer
-from lingbot.optim import build_lr_scheduler, build_optimizer
-from lingbot.utils import helper
-from lingbot.utils.ema import ema_update
-from lingbot.utils.arguments import DataArguments, ModelArguments, TrainingArguments, parse_args, save_args
-from lingbot.utils.dist_utils import all_reduce
+from lingbotvla.data.vla_data import liberoDataset, RobotwinDataset
+from lingbotvla.distributed.offloading import build_activation_offloading_context
+from lingbotvla.distributed.parallel_state import get_parallel_state, init_parallel_state
+from lingbotvla.distributed.torch_parallelize import build_parallelize_model
+from lingbotvla.models import build_foundation_model, build_processor, save_model_assets, save_model_weights, build_tokenizer
+from lingbotvla.optim import build_lr_scheduler, build_optimizer
+from lingbotvla.utils import helper
+from lingbotvla.utils.ema import ema_update
+from lingbotvla.utils.arguments import DataArguments, ModelArguments, TrainingArguments, parse_args, save_args
+from lingbotvla.utils.dist_utils import all_reduce
 
-from lingbot.models.vla.vision_models.module_utils import build_depth_model, get_depth_target, log_depth
+from lingbotvla.models.vla.vision_models.module_utils import build_depth_model, get_depth_target, log_depth
 
 if TYPE_CHECKING:
     from transformers import ProcessorMixin
 
-    from lingbot.data.chat_template import ChatTemplate
+    from lingbotvla.data.chat_template import ChatTemplate
 
 
 logger = helper.create_logger(__name__)
@@ -293,16 +293,15 @@ def main():
     use_depth_align = True if args.train.align_params != {} else False
     depth_model_type = None
     if use_depth_align:
+        assert args.model.moge_path is not None and args.model.morgbd_path is not None, 'Depth models need to be loaded when uing LingBot-VLA-Depth!!!'
+        args.train.align_params['visual_dir'] = os.path.join(args.train.output_dir, 'images')
+        args.train.align_params['depth']['moge_path'] = args.model.moge_path
+        args.train.align_params['depth']['morgbd_path'] = args.model.morgbd_path
         depth_model_type = args.train.align_params['depth']['model_type']
-        if depth_model_type == 'DepthAnythingV2':
-            dav2_backbone, dav2_head = build_depth_model(args.train.align_params)
-            if args.train.use_compile:
-                dav2_backbone = torch.compile(dav2_backbone)
-        elif depth_model_type == 'MoRGBD':
-            moge_model, morgbd_model = build_depth_model(args.train.align_params)
-            if args.train.use_compile:
-                moge_model = torch.compile(moge_model)
-                morgbd_model = torch.compile(morgbd_model)
+        moge_model, morgbd_model = build_depth_model(args.train.align_params)
+        if args.train.use_compile:
+            moge_model = torch.compile(moge_model)
+            morgbd_model = torch.compile(morgbd_model)
         os.makedirs(args.train.align_params['visual_dir'], exist_ok=True)
     model_config = model.config
     helper.print_device_mem_info("VRAM usage after building model")
@@ -564,14 +563,9 @@ def main():
                 depth_forward_time = 0
                 if use_depth_align:
                     with torch.no_grad():
-                        if depth_model_type == 'DepthAnythingV2':
-                            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                                pil_images = micro_batch.pop('pil_images', None)
-                                depth_targets, cls_token = get_depth_target(depth_model_type, dav2_backbone, pil_images)
-                        elif depth_model_type == 'MoRGBD':
-                            with torch.autocast("cuda", dtype=torch.bfloat16):
-                                pil_images = micro_batch.pop('pil_images', None)
-                                depth_targets, cls_token = get_depth_target(depth_model_type, (moge_model, morgbd_model), pil_images)
+                        with torch.autocast("cuda", dtype=torch.bfloat16):
+                            pil_images = micro_batch.pop('pil_images', None)
+                            depth_targets, cls_token = get_depth_target(depth_model_type, (moge_model, morgbd_model), pil_images)
 
                 with model_fwd_context:
                     # torch.cuda.synchronize()
@@ -672,12 +666,8 @@ def main():
                 if use_depth_align:
                     if global_step % args.train.align_params['visual_steps'] == 0:
                         with torch.no_grad():
-                            if depth_model_type == 'DepthAnythingV2':
-                                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):                
-                                    log_depth(dav2_head, depth_preds, depth_targets, steps=global_step, config=args.train.align_params, cls_token=cls_token)
-                            elif depth_model_type == 'MoRGBD':
-                                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):                
-                                    log_depth(morgbd_model, depth_preds, depth_targets, steps=global_step, config=args.train.align_params, cls_token=cls_token)
+                            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):                
+                                log_depth(morgbd_model, depth_preds, depth_targets, steps=global_step, config=args.train.align_params, cls_token=cls_token)
 
             if args.train.save_steps and global_step % args.train.save_steps == 0:
                 helper.empty_cache()

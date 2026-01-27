@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lingbot"
+name = "lingbotvla"
 dynamic = ["dependencies", "optional-dependencies"]
 version = "0.0.1"
 authors = [
@@ -28,7 +28,7 @@ select = ["C", "E", "F", "I", "W"]
 
 [tool.ruff.lint.isort]
 lines-after-imports = 2
-known-first-party = ["lingbot"]
+known-first-party = ["lingbotvla"]
 known-third-party = ["torch", "transformers", "wandb"]
 
 [tool.ruff.format]

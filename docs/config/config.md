@@ -73,7 +73,7 @@
 | train.save_hf_weights | bool | Whether to save the model weights in the huggingface format. It is recommended to set it to False for models > 30B to prevent NCCL timeout. You can convert it after training. | True |
 | train.seed | int | Random seed. | 42 |
 | train.use_wandb | bool | Whether to enable byted wandb experiment logging. | True |
-| train.wandb_project | str | Name of the wandb experiment project. | LingBot |
+| train.wandb_project | str | Name of the wandb experiment project. | LingBotVLA |
 | train.wandb_name | str | Name of the wandb experiment. | None |
 | train.enable_profiling | bool | Whether to use torch profiling. | False |
 | train.profile_start_step | int | Starting step of profiling. | 1 |

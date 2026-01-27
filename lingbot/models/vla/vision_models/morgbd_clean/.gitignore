@@ -1,7 +1,0 @@
-*.pyc
-*.mp4
-*.egg-info
-submit.sh
-renderpy/
-ckpts/
-res/

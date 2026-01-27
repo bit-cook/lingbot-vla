@@ -1,18 +1,26 @@
-"""Utils for evaluating the OpenVLA policy."""
-
 import json
 import os
 import time
+import random
+import numpy as np
 from collections import deque
 import torchvision
 import yaml
 from types import SimpleNamespace
-
+from packaging.version import Version
+from typing import Callable, Dict, List, Optional, Type, Union, Tuple, Any, Sequence
 from glob import glob
 from tqdm import tqdm
 from safetensors import safe_open
+from safetensors.torch import load_file
 from pathlib import Path
+from PIL import Image
+import torch
+import torch.nn.functional as F
+from torch import Tensor, nn
 
+
+import transformers
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers import (
     AutoConfig,
@@ -21,23 +29,12 @@ from transformers import (
     AutoProcessor,
 )
 
-
-from typing import Callable, Dict, List, Optional, Type, Union, Tuple, Any, Sequence
-import numpy as np
-from torch import Tensor, nn
 from lerobot.configs.policies import PreTrainedConfig
-from safetensors.torch import load_file
-import torch
-from PIL import Image
-import torch.nn.functional as F
-import transformers
-from packaging.version import Version
-from lingbot.models.vla.pi0.modeling_pi0 import PI0Policy
-from lingbot.models.vla.pi0.modeling_lingbot_vla import LingbotVlaPolicy
-import random
-from lingbot.data.vla_data.transform import Normalizer, prepare_images, prepare_language, prepare_state
-from lingbot.models import build_processor
-import time
+from lingbotvla.models.vla.pi0.modeling_pi0 import PI0Policy
+from lingbotvla.models.vla.pi0.modeling_lingbot_vla import LingbotVlaPolicy
+from lingbotvla.data.vla_data.transform import Normalizer, prepare_images, prepare_language, prepare_state
+from lingbotvla.models import build_processor
+
 
 def set_seed_everywhere(seed: int):
     """Sets the random seed for Python, NumPy, and PyTorch functions."""
@@ -52,9 +49,8 @@ def set_seed_everywhere(seed: int):
 set_seed_everywhere(42)
 
 BASE_MODEL_PATH = {
-    'pi0': '/robby/share/MM/checkpoints/huggingface/paligemma-3b-pt-224/',
-    'lingbotvla': '/robby/share/MM/checkpoints/huggingface/Qwen2.5-VL-3B-Instruct',
-    'rexpi0': '/robby/share/MM/checkpoints/Rex-Omni-ckp/',
+    'pi0': os.environ.get('PALIGEMMA_PATH', './paligemma-3b-pt-224/'),
+    'lingbotvla': os.environ.get('QWEN25_PATH', './Qwen2.5-VL-3B-Instruct/'),
 }
 
 def load_model_weights(policy, path_to_pi_model, strict=True):
@@ -66,42 +62,6 @@ def load_model_weights(policy, path_to_pi_model, strict=True):
             for key in f.keys():
                 merged_weights[key] = f.get_tensor(key)
     policy.load_state_dict(merged_weights, strict=strict)
-
-class AdaptiveEnsembler:
-    def __init__(self, pred_action_horizon, adaptive_ensemble_alpha=0.0):
-        self.pred_action_horizon = pred_action_horizon
-        self.action_history = deque(maxlen=self.pred_action_horizon)
-        self.adaptive_ensemble_alpha = adaptive_ensemble_alpha
-
-    def reset(self):
-        self.action_history.clear()
-
-    def ensemble_action(self, cur_action):
-        self.action_history.append(cur_action)
-        num_actions = len(self.action_history)
-        if cur_action.ndim == 1:
-            curr_act_preds = np.stack(self.action_history)
-        else:
-            curr_act_preds = np.stack(
-                [pred_actions[i] for (i, pred_actions) in zip(range(num_actions - 1, -1, -1), self.action_history)]
-            )
-
-        # calculate cosine similarity between the current prediction and all previous predictions
-        ref = curr_act_preds[num_actions-1, :]
-        previous_pred = curr_act_preds
-        dot_product = np.sum(previous_pred * ref, axis=1)  
-        norm_previous_pred = np.linalg.norm(previous_pred, axis=1)  
-        norm_ref = np.linalg.norm(ref)  
-        cos_similarity = dot_product / (norm_previous_pred * norm_ref + 1e-7)
-
-        # compute the weights for each prediction
-        weights = np.exp(self.adaptive_ensemble_alpha * cos_similarity)
-        weights = weights / weights.sum()
-  
-        # compute the weighted average across all predictions for this timestep
-        cur_action = np.sum(weights[:, None] * curr_act_preds, axis=0)
-
-        return cur_action
 
 
 def center_crop_image(image: Union[np.ndarray, Image.Image]) -> Image.Image:
@@ -152,7 +112,7 @@ def resize_with_pad(img, width, height, pad_value=-1):
     
     # channel last to channel first if necessary
     if img.shape[1] not in (1, 3) and img.shape[-1] in (1, 3):
-        img = img.permute(0, 3, 1, 2)  # (B, H, W, C) → (B, C, H, W)
+        img = img.permute(0, 3, 1, 2)
 
     cur_height, cur_width = img.shape[2:]
 
@@ -272,13 +232,10 @@ class QwenPiServer:
     ) -> None:
         assert not (use_bf16 and use_fp32), 'Bfloat16 or Float32!!!'
         self.adaptive_ensemble_alpha = adaptive_ensemble_alpha
-        self.action_ensemble_horizon = action_ensemble_horizon
         self.use_length = use_length
         self.chunk_ret = chunk_ret
 
         self.task_description = None
-
-        self.action_ensembler = AdaptiveEnsembler(self.action_ensemble_horizon, self.adaptive_ensemble_alpha)
         
         self.vla = self.load_vla(path_to_pi_model)
         self.vla = self.vla.cuda().eval()
@@ -298,7 +255,7 @@ class QwenPiServer:
         config = PreTrainedConfig.from_pretrained(path_to_pi_model)
         
         # load training config
-        training_config_path = Path(path_to_pi_model).parent.parent.parent/'lingbot_cli.yaml'
+        training_config_path = Path(path_to_pi_model).parent.parent.parent/'lingbotvla_cli.yaml'
         with open(training_config_path, 'r') as f:
             training_config = yaml.safe_load(f)
         f.close()
@@ -312,11 +269,6 @@ class QwenPiServer:
 
         # Set attention_implementation to 'eager' to speed up evaluation.
         config.attention_implementation = 'eager'
-
-        # if 'align_params' in training_config['train']:
-        #     # training with depth model
-        #     strict = False
-        # else: strict = True
         
         # set base model according to training config
         training_base_model = training_config['model']['tokenizer_path']
@@ -325,8 +277,6 @@ class QwenPiServer:
             config.vocab_size = 257152 # set vocab size for paligamma
         elif 'qwen2' in training_base_model.lower():
             model_name = 'lingbotvla'
-        elif 'rex-omni' in training_base_model.lower():
-            model_name = 'rexpi0'
         else: 
             raise ValueError(f"Unsupported base model of {path_to_pi_model}")
         base_model_path = BASE_MODEL_PATH[model_name]
@@ -380,14 +330,11 @@ class QwenPiServer:
             },
         )
 
-
         print('Model initialized ... ')
 
         return policy
 
     def reset(self, robo_name, path_to_pi_model = None) -> None:
-        if self.use_length == -1:
-            self.action_ensembler.reset()
 
         if path_to_pi_model is not None:
             self.vla = self.load_vla(path_to_pi_model)
@@ -402,10 +349,6 @@ class QwenPiServer:
 
         if getattr(self.data_config, 'norm_type', None) is None:
             self.data_config.norm_type = 'meanstd'
-        # if getattr(self.config, 'interact_layer_start', None) is None:
-        #     self.config.interact_layer_start = None
-        # if getattr(self.config, 'interact_layer_end', None) is None:
-        #     self.config.interact_layer_end = None
         if getattr(self.config, 'vlm_causal', None) is None:
             self.config.vlm_causal = False
         if getattr(self.config, 'qwenvl_bos', None) is None:
@@ -455,10 +398,7 @@ class QwenPiServer:
             joint_max_dim = getattr(self, 'joint_max_dim')
             action_dim = getattr(self, 'action_dim')
             chunk_size = getattr(self, 'chunk_size')
-            # observation['action'] = torch.zeros(chunk_size, action_dim)
-            # observation['action'+'_is_pad'] = torch.zeros(chunk_size).to(torch.bool)
             normalized_observation = self.vla.normalizer.normalize(observation)
-            # print(f'State is {normalized_observation["observation.state"]}')
             base_image = (normalized_observation["observation.images.cam_high"] * 255).to(torch.uint8)
             left_wrist_image = (normalized_observation["observation.images.cam_left_wrist"] * 255).to(
                 torch.uint8
@@ -471,9 +411,8 @@ class QwenPiServer:
                 "state": normalized_observation["observation.state"].to(torch.float32),
                 "prompt": [observation["task"]],
             }
-            state = prepare_state(self.config, obs_dict) # bs,8 -> bs,32
-            lang_tokens, lang_masks = prepare_language(self.config, self.language_tokenizer, obs_dict) # bs, seq_len
-            # actions = prepare_action(self.config, obs_dict) # bs,50,7 -> bs,50,32 , 7
+            state = prepare_state(self.config, obs_dict)
+            lang_tokens, lang_masks = prepare_language(self.config, self.language_tokenizer, obs_dict)
             images, img_masks, _ = prepare_images(self.config, self.image_processor, obs_dict)
             observation = {
                 'images': images,
@@ -491,7 +430,6 @@ class QwenPiServer:
         if self.chunk_ret:
             action = self.vla.select_action(observation, self.use_bf16, self.config.vlm_causal)[org_actions[0]].float().cpu().numpy()
             action = action[:self.use_length, :self.action_dim]
-            # print(f'Action shape is {action.shape}')
         else:
             if self.use_length == -1 or self.global_step % self.use_length == 0:
                 action = self.vla.select_action(observation, self.use_bf16, self.config.vlm_causal)[org_actions[0]]
@@ -499,8 +437,6 @@ class QwenPiServer:
                 
             if self.use_length > 0:
                 action = self.last_action_chunk[self.global_step % self.use_length]
-            elif self.use_length == -1: # do ensemble
-                action = self.action_ensembler.ensemble_action(action)
             action = action[:, :self.action_dim]
             print(f"on server step: {self.global_step}")
             self.global_step+=1
@@ -523,21 +459,21 @@ def main():
         "--use_length",
         type=int,
         default=50,
-        help="chunk的使用长度"
+        help="used length of action chunk"
     )
 
     parser.add_argument(
         "--chunk_ret",
         type=bool,
         default=True,
-        help="chunk的使用长度"
+        help=" True: The returned action tensor includes the horizon dimension. This allows the model to output a sequence of actions for each horizon step. False: The horizon dimension is omitted. The model selects and returns the next step autonomously based on its policy."
     )
 
     parser.add_argument(
         "--port",
         type=int,
         default=8006,
-        help="WebSocket 服务器端口号"
+        help="port of WebSocket"
     )
 
     args = parser.parse_args()
@@ -549,32 +485,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # # To debug model only
-    # import torch
-    # import numpy as np
-    # from PIL import Image
-    # from .image_tools import convert_to_uint8
-    # device = torch.device("cuda")
-
-    # PATH_TO_PI_MODEL = "/robby/share/MM/robotwin_ckpt/lingbot_cotraining_abs/lingbot_robotwin5new/checkpoints/global_step_20010/hf_ckpt/"
-
-    # # observation =  {
-    # #     "image": np.random.randint(0, 256, size=(224, 224, 3), dtype=np.uint8), 
-    # #     "wrist_image": np.random.randint(0, 256, size=(224, 224, 3), dtype=np.uint8),
-    # #     "state": np.random.rand(8).astype(np.float32),
-    # #     "task": "do something",
-    # # }
-
-    # observation = {
-    #         "observation.images.cam_high": np.random.randint(0, 256, size=(224, 224, 3), dtype=np.uint8),
-    #         "observation.images.cam_left_wrist": np.random.randint(0, 256, size=(224, 224, 3), dtype=np.uint8),
-    #         "observation.images.cam_right_wrist": np.random.randint(0, 256, size=(224, 224, 3), dtype=np.uint8),
-    #         "observation.state": np.random.rand(14).astype(np.float32),
-    #         "task": "do something",
-    #         }
-
-    # model = QwenPiServer(PATH_TO_PI_MODEL, use_length=50)
-
-    # model.reset(robo_name='robotwin_all')
-    # model.infer(observation)

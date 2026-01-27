@@ -1,2 +1,2 @@
-Welcome to LingBot
+Welcome to LingBotVLA
 =========================

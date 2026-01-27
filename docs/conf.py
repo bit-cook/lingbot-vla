@@ -17,11 +17,9 @@
 
 # -- Project information -----------------------------------------------------
 
-project = "LingBot"
+project = "LingBotVLA"
 # pylint: disable=W0622
 copyright = "2026 Robbyant Team, based on VeOmni by ByteDance Seed Foundation MLSys Team"
-author = "Fan Lu, Wei Wu, Shuai Yang, Yunnan Wang, Shi Liu"
-
 
 # -- General configuration ---------------------------------------------------
 # The master toctree document.
