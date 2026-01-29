@@ -663,11 +663,11 @@ def main():
                 except Exception as e:
                     logger.info_rank0(f"⚠️ Failed to write loss.jsonl: {e}")
 
-                if use_depth_align:
-                    if global_step % args.train.align_params['visual_steps'] == 0:
-                        with torch.no_grad():
-                            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):                
-                                log_depth(morgbd_model, depth_preds, depth_targets, steps=global_step, config=args.train.align_params, cls_token=cls_token)
+                # if use_depth_align:
+                #     if global_step % args.train.align_params['visual_steps'] == 0:
+                #         with torch.no_grad():
+                #             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):                
+                #                 log_depth(morgbd_model, depth_preds, depth_targets, steps=global_step, config=args.train.align_params, cls_token=cls_token)
 
             if args.train.save_steps and global_step % args.train.save_steps == 0:
                 helper.empty_cache()
