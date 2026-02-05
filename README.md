@@ -189,13 +189,15 @@ python -m deploy.lingbot_robotwin_policy \
  --port port
 ```
 
+- **Customized Post-training**
+To construct post-training in specified downstream tasks, we have provided an example and please refer to [Custom](lingbotvla/data/vla_data/README.md) for details.
 ---
 
 ## 🏗️ Efficiency
 <p align="center">
   <img src="assets/QwenPI_PaliGemmaPI.png" width="85%">
 </p>
-We evaluate the training efficiency of our codebase against established baselines for both **Qwen2.5-VL-3B-π** and **PaliGemma-3B-pt-224-π** models. The results demonstrate that our codebase
+We evaluate the training efficiency of our codebase against established baselines for both <b>Qwen2.5-VL-3B-π</b> and <b>PaliGemma-3B-pt-224-π</b> models. The results demonstrate that our codebase
 achieved the fastest training speeds in both model settings. The above figures detail the training throughput across configurations of 8, 16, 32, 128, and 256 GPUs, alongside the theoretical linear scaling limit.
 
 ---
