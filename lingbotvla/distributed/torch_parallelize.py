@@ -159,10 +159,10 @@ def build_parallelize_model(
                 fsdp_kwargs["mp_policy"] = mp_policy
             if ignore_norm:
                 ignored_modules = set()
-                for layer in model.model.paligemma_with_expert.paligemma.language_model.model.layers:
+                for layer in model.model.qwenvl_with_expert.qwenvl.language_model.model.layers:
                     ignored_modules.add(layer.input_layernorm.weight)
                     ignored_modules.add(layer.post_attention_layernorm.weight)
-                for expert_layers in model.model.paligemma_with_expert.gemma_expert.model.layers:
+                for expert_layers in model.model.qwenvl_with_expert.qwen_expert.model.layers:
                     ignored_modules.add(expert_layers.input_layernorm.weight)
                     ignored_modules.add(expert_layers.post_attention_layernorm.weight)
                 fsdp_kwargs["ignored_params"] = ignored_modules
@@ -207,8 +207,8 @@ def build_parallelize_model(
             if basic_modules:
                 model.apply(apply_fsdp_to_decoder_blocks)
             elif fsdp_llm_blocks:
-                layers = model.model.paligemma_with_expert.paligemma.language_model.model.layers
-                expert_layers = model.model.paligemma_with_expert.gemma_expert.model.layers
+                layers = model.model.qwenvl_with_expert.qwenvl.language_model.model.layers
+                expert_layers = model.model.qwenvl_with_expert.qwen_expert.model.layers
                 if not hasattr(layers, '__iter__') or not hasattr(expert_layers, '__iter__'):
                     raise TypeError("Expected 'layers' to be a module list or container.")
                 logger.info_rank0(f"Applying FSDP to {len(layers)} transformer layers in Paligemma and Gemma decoder.")

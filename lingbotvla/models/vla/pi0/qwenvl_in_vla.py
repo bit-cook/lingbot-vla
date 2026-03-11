@@ -310,16 +310,16 @@ class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_static_cache = False  # TODO (joao): fix. torch.compile failing probably due to `cache_positions`
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv3d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+    # def _init_weights(self, module):
+    #     std = self.config.initializer_range
+    #     if isinstance(module, (nn.Linear, nn.Conv3d)):
+    #         module.weight.data.normal_(mean=0.0, std=std)
+    #         if module.bias is not None:
+    #             module.bias.data.zero_()
+    #     elif isinstance(module, nn.Embedding):
+    #         module.weight.data.normal_(mean=0.0, std=std)
+    #         if module.padding_idx is not None:
+    #             module.weight.data[module.padding_idx].zero_()
 
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
@@ -907,6 +907,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
+        self._init_weights = lambda module: None
         self.post_init()
 
     def get_input_embeddings(self):

@@ -513,7 +513,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
         config: Qwen2Config
     """
 
-    def __init__(self, config: Qwen2Config):
+    def __init__(self, config: Qwen2Config, eval=False):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -527,6 +527,8 @@ class Qwen2Model(Qwen2PreTrainedModel):
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
+        if eval:
+            self._init_weights = lambda module: None
         self.post_init()
 
     def get_input_embeddings(self):
@@ -803,9 +805,9 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config, eval):
         super().__init__(config)
-        self.model = Qwen2Model(config)
+        self.model = Qwen2Model(config, eval)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1234,7 +1236,7 @@ def replace_lnorm_with_adanorm(module, hidden_size, cond_dim, split_gate_liner, 
 class QwenvlWithExpertModel(PreTrainedModel):
     config_class = QwenvlWithExpertConfig
 
-    def __init__(self, config: QwenvlWithExpertConfig):
+    def __init__(self, config: QwenvlWithExpertConfig, eval=False):
         super().__init__(config=config)
         self.config = config
         vlm_config = AutoConfig.from_pretrained(self.config.tokenizer_path)
@@ -1246,7 +1248,7 @@ class QwenvlWithExpertModel(PreTrainedModel):
         if self.config.use_lm_head:
             self.qwenvl.tie_weights()
         self.config.qwen_expert_config.norm_qkv = self.config.norm_qkv
-        self.qwen_expert = Qwen2ForCausalLM._from_config(self.config.qwen_expert_config, use_flash_attention_2=True)
+        self.qwen_expert = Qwen2ForCausalLM._from_config(self.config.qwen_expert_config, use_flash_attention_2=True, eval=eval)
 
         if getattr(self.config, 'adanorm_time', False):
             replace_lnorm_with_adanorm(self.qwen_expert, self.config.qwen_expert_config.hidden_size, self.config.qwen_expert_config.hidden_size, config.split_gate_liner, config.no_split_gate_liner, config.final_norm_adanorm, config.old_adanorm)
@@ -1505,6 +1507,7 @@ class LingbotVlaPolicy(PreTrainedPolicy):
         self,
         config: PI0Config,
         tokenizer_path: str,
+        eval: bool=False,
     ):
         """
         Args:
@@ -1515,7 +1518,7 @@ class LingbotVlaPolicy(PreTrainedPolicy):
         super().__init__(config)
         self.config = config
         self.language_tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
-        self.model = FlowMatching(config)
+        self.model = FlowMatching(config, eval)
 
         if not getattr(self.config,"use_lm_head", False):
             del self.model.qwenvl_with_expert.qwenvl.lm_head
@@ -1561,7 +1564,7 @@ class LingbotVlaPolicy(PreTrainedPolicy):
         return total_loss, loss_vla, loss_depth, loss_dict, depth_preds
 
 class FlowMatching(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, eval):
         super().__init__()
         self.config = config
 
@@ -1584,7 +1587,7 @@ class FlowMatching(nn.Module):
         qwenvl_with_export_config.final_norm_adanorm = getattr(config, "final_norm_adanorm", False)
         qwenvl_with_export_config.norm_qkv = getattr(config, "norm_qkv", False)
         self.qwenvl_with_expert = QwenvlWithExpertModel(
-            qwenvl_with_export_config
+            qwenvl_with_export_config, eval
         )
         self.config.proj_width = qwenvl_with_export_config.qwen_expert_config.hidden_size
         self.config.initializer_range = getattr(qwenvl_with_export_config.qwen_expert_config, "initializer_range", None)

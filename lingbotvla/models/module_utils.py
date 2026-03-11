@@ -208,7 +208,7 @@ def get_model_prefix(parameter_names):
     vlm_prefix = ''
     for param_name in parameter_names:
         parts = param_name.split('.')
-        if parts[1]=='paligemma_with_expert' and 'expert' not in parts[2]:
+        if parts[1]=='qwenvl_with_expert' and 'expert' not in parts[2]:
             vlm_prefix='.'.join(parts[:3])+'.'
             break
     return vlm_prefix

@@ -208,3 +208,11 @@ __marimo__/
 
 # log
 *log.txt
+ossutil_output/
+.sumi/
+env.sh
+pids_qwenpi.txt
+run.sh
+start_multi_eval.sh
+trash/
+eval.sh
